@@ -1,0 +1,9 @@
+/target
+/data/raw/*
+/data/normalized/*
+!/data/raw/.gitkeep
+!/data/normalized/.gitkeep
+*.parquet
+.DS_Store
+.idea/
+.vscode/
