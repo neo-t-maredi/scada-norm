@@ -1,0 +1,34 @@
+[package]
+name = "scada-norm"
+version = "0.1.0"
+edition = "2024"
+authors = ["Neo Maredi"]
+description = "A CLI for normalizing wind farm SCADA exports across aggregation systems"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/neo-t-maredi/scada-norm"
+readme = "README.md"
+
+[dependencies]
+# CLI argument parsing — de facto standard, mature, well-audited
+clap = { version = "=4.6.1", features = ["derive"] }
+
+# Error handling — attaches context to errors without boilerplate
+anyhow = "=1.0.103"
+
+# Structured logging — used across most production Rust
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+
+# CSV parsing — battle-tested, from BurntSushi (also wrote ripgrep)
+csv = "=1.4.0"
+
+# Serialization framework — needed by csv crate and others
+serde = { version = "=1.0.228", features = ["derive"] }
+
+# Date/time handling — real SCADA timestamps have timezones and DST issues
+chrono = { version = "=0.4.45", features = ["serde"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
