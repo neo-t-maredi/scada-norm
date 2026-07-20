@@ -7,6 +7,23 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
+use crate::canonical::CanonicalRow;
+use chrono::{DateTime, NaiveDateTime, Utc};
+
+// Column indices (0-based) into the Kelmarsh Turbine_Data CSV.
+// See SCHEMA.md for the source-to-canonical mapping and docs/kelmarsh_columns.txt
+// for the full column reference.
+const COL_TIMESTAMP: usize = 0;
+const COL_WIND_SPEED: usize = 1;
+const COL_WIND_DIRECTION: usize = 15;
+const COL_NACELLE_POSITION: usize = 16;
+const COL_ACTIVE_POWER: usize = 61;
+const COL_REACTIVE_POWER: usize = 86;
+const COL_AMBIENT_TEMP: usize = 93;
+const COL_ROTOR_RPM: usize = 210;
+const COL_GENERATOR_RPM: usize = 211;
+const COL_PITCH_ANGLE: usize = 245;
+
 /// Parse a string field into an optional f64.
 ///
 /// Returns `None` for the Greenbyte "NaN" sentinel and empty strings.
@@ -56,42 +73,73 @@ fn turbine_id_from_path(path: &Path) -> Option<String> {
     Some(format!("KWF{}", turbine_number))
 }
 
-/// Open a Kelmarsh Turbine_Data CSV and print its header row.
+/// Read the first data row from a Kelmarsh Turbine_Data CSV and return
+/// it as a CanonicalRow.
 ///
-/// This is a scaffolding function to prove the file structure is
-/// handled correctly:
-///   - Opens the file
-///   - Skips 9 comment lines
-///   - Reads line 10 as the header
-///   - Splits by comma (RFC-4180 aware via csv crate)
-///   - Prints one column name per line, numbered
-///
-/// Not part of the final parser API — Piece 4 replaces this with
-/// actual CanonicalRow extraction.
-pub fn print_header(csv_path: &Path) -> anyhow::Result<()> {
+/// This is Piece 4 of the parser walkthrough — proves that we can:
+///   - Open the file
+///   - Skip 9 comment lines
+///   - Parse the header
+///   - Read one data row
+///   - Extract 10 canonical fields by column index
+///   - Handle NaN sentinels via parse_optional_f64
+///   - Attach turbine_id from the filename
+///   - Parse the timestamp as UTC
+pub fn read_first_row(csv_path: &Path) -> anyhow::Result<CanonicalRow> {
+    let turbine_id = turbine_id_from_path(csv_path)
+        .ok_or_else(|| anyhow::anyhow!("could not extract turbine ID from filename"))?;
+
     let file = File::open(csv_path)?;
     let mut reader = BufReader::new(file);
 
-    // Skip the 9 comment lines at the top of Greenbyte exports.
+    // Skip 9 comment lines.
     let mut discard = String::new();
     for _ in 0..9 {
         discard.clear();
         reader.read_line(&mut discard)?;
     }
 
-    // Now hand the rest of the file to the csv crate to parse the header.
     let mut csv_reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .from_reader(reader);
 
-    let headers = csv_reader.headers()?.clone();
+    // Read the first data record.
+    let record = csv_reader
+        .records()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("no data rows found"))??;
 
-    println!("Found {} columns:", headers.len());
-    for (i, col) in headers.iter().enumerate() {
-        println!("{:4}  {}", i + 1, col);
-    }
+    // Parse timestamp (format: "2020-01-01 00:00:00", declared UTC by file header).
+    let ts_str = record.get(COL_TIMESTAMP)
+        .ok_or_else(|| anyhow::anyhow!("timestamp column missing"))?;
+    let naive = NaiveDateTime::parse_from_str(ts_str, "%Y-%m-%d %H:%M:%S")?;
+    let timestamp_utc = DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc);
 
-    Ok(())
+    // Helper closure to pull a field by index and parse as Option<f64>.
+    let get_f64 = |idx: usize| -> Option<f64> {
+        record.get(idx).and_then(parse_optional_f64_str)
+    };
+
+    Ok(CanonicalRow {
+        timestamp_utc,
+        turbine_id,
+        wind_speed_ms: get_f64(COL_WIND_SPEED),
+        wind_direction_deg: get_f64(COL_WIND_DIRECTION),
+        nacelle_position_deg: get_f64(COL_NACELLE_POSITION),
+        active_power_kw: get_f64(COL_ACTIVE_POWER),
+        reactive_power_kvar: get_f64(COL_REACTIVE_POWER),
+        ambient_temp_c: get_f64(COL_AMBIENT_TEMP),
+        rotor_rpm: get_f64(COL_ROTOR_RPM),
+        generator_rpm: get_f64(COL_GENERATOR_RPM),
+        pitch_angle_deg: get_f64(COL_PITCH_ANGLE),
+    })
+}
+
+/// Adapter: `parse_optional_f64` takes `&str`, but our closure receives
+/// `&str` from record.get(). This wrapper matches the closure signature
+/// expected by Option's `and_then`.
+fn parse_optional_f64_str(s: &str) -> Option<f64> {
+    parse_optional_f64(s)
 }
 
 #[cfg(test)]
