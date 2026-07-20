@@ -3,6 +3,8 @@
 //! Reads Greenbyte-formatted SCADA exports and produces `CanonicalRow`
 //! instances. See `SCHEMA.md` for the source-to-canonical mapping.
 
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 /// Parse a string field into an optional f64.
@@ -52,6 +54,44 @@ fn turbine_id_from_path(path: &Path) -> Option<String> {
     }
 
     Some(format!("KWF{}", turbine_number))
+}
+
+/// Open a Kelmarsh Turbine_Data CSV and print its header row.
+///
+/// This is a scaffolding function to prove the file structure is
+/// handled correctly:
+///   - Opens the file
+///   - Skips 9 comment lines
+///   - Reads line 10 as the header
+///   - Splits by comma (RFC-4180 aware via csv crate)
+///   - Prints one column name per line, numbered
+///
+/// Not part of the final parser API — Piece 4 replaces this with
+/// actual CanonicalRow extraction.
+pub fn print_header(csv_path: &Path) -> anyhow::Result<()> {
+    let file = File::open(csv_path)?;
+    let mut reader = BufReader::new(file);
+
+    // Skip the 9 comment lines at the top of Greenbyte exports.
+    let mut discard = String::new();
+    for _ in 0..9 {
+        discard.clear();
+        reader.read_line(&mut discard)?;
+    }
+
+    // Now hand the rest of the file to the csv crate to parse the header.
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(reader);
+
+    let headers = csv_reader.headers()?.clone();
+
+    println!("Found {} columns:", headers.len());
+    for (i, col) in headers.iter().enumerate() {
+        println!("{:4}  {}", i + 1, col);
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
