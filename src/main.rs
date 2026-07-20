@@ -1,3 +1,6 @@
+mod canonical;
+mod parser;
+
 fn main() {
-    println!("Hello, world!");
+    println!("scada-norm — nothing wired up yet");
 }
