@@ -1,5 +1,4 @@
-mod canonical;
-mod parser;
+use scada_norm::parser;
 
 use std::path::Path;
 use std::time::Instant;

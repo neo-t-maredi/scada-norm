@@ -8,6 +8,12 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/neo-t-maredi/scada-norm"
 readme = "README.md"
 
+
+[lib]
+name = "scada_norm"
+path = "src/lib.rs"
+
+
 [dependencies]
 # CLI argument parsing — de facto standard, mature, well-audited
 clap = { version = "=4.6.1", features = ["derive"] }
