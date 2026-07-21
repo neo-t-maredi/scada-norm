@@ -33,3 +33,7 @@
 - Add a second dataset (Nørrekær) yet
 - Touch Parquet output yet
 - Skip lunch again
+### README revision
+- Current README is Day 1 status boilerplate
+- Revisit on Day 6 with real shipped features to describe
+- Add: canonical schema description, ops-engineer framing, example command

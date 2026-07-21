@@ -10,6 +10,15 @@ use std::path::Path;
 use crate::canonical::CanonicalRow;
 use chrono::{DateTime, NaiveDateTime, Utc};
 
+/// Statistics from parsing a Kelmarsh SCADA file.
+#[derive(Debug, Default, Clone)]
+pub struct ParseStats {
+    /// Number of data rows successfully parsed into CanonicalRow.
+    pub rows_ok: usize,
+    /// Number of data rows that failed to parse (bad timestamp, malformed record, etc).
+    pub rows_failed: usize,
+}
+
 // Column indices (0-based) into the Kelmarsh Turbine_Data CSV.
 // See SCHEMA.md for the source-to-canonical mapping and docs/kelmarsh_columns.txt
 // for the full column reference.
@@ -85,7 +94,62 @@ fn turbine_id_from_path(path: &Path) -> Option<String> {
 ///   - Handle NaN sentinels via parse_optional_f64
 ///   - Attach turbine_id from the filename
 ///   - Parse the timestamp as UTC
-pub fn read_first_row(csv_path: &Path) -> anyhow::Result<CanonicalRow> {
+// pub fn read_first_row(csv_path: &Path) -> anyhow::Result<CanonicalRow> {
+//     let turbine_id = turbine_id_from_path(csv_path)
+//         .ok_or_else(|| anyhow::anyhow!("could not extract turbine ID from filename"))?;
+
+//     let file = File::open(csv_path)?;
+//     let mut reader = BufReader::new(file);
+
+//     // Skip 9 comment lines.
+//     let mut discard = String::new();
+//     for _ in 0..9 {
+//         discard.clear();
+//         reader.read_line(&mut discard)?;
+//     }
+
+//     let mut csv_reader = csv::ReaderBuilder::new()
+//         .has_headers(true)
+//         .from_reader(reader);
+
+//     // Read the first data record.
+//     let record = csv_reader
+//         .records()
+//         .next()
+//         .ok_or_else(|| anyhow::anyhow!("no data rows found"))??;
+
+//     // Parse timestamp (format: "2020-01-01 00:00:00", declared UTC by file header).
+//     let ts_str = record.get(COL_TIMESTAMP)
+//         .ok_or_else(|| anyhow::anyhow!("timestamp column missing"))?;
+//     let naive = NaiveDateTime::parse_from_str(ts_str, "%Y-%m-%d %H:%M:%S")?;
+//     let timestamp_utc = DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc);
+
+//     // Helper closure to pull a field by index and parse as Option<f64>.
+//     let get_f64 = |idx: usize| -> Option<f64> {
+//         record.get(idx).and_then(parse_optional_f64_str)
+//     };
+
+//     Ok(CanonicalRow {
+//         timestamp_utc,
+//         turbine_id,
+//         wind_speed_ms: get_f64(COL_WIND_SPEED),
+//         wind_direction_deg: get_f64(COL_WIND_DIRECTION),
+//         nacelle_position_deg: get_f64(COL_NACELLE_POSITION),
+//         active_power_kw: get_f64(COL_ACTIVE_POWER),
+//         reactive_power_kvar: get_f64(COL_REACTIVE_POWER),
+//         ambient_temp_c: get_f64(COL_AMBIENT_TEMP),
+//         rotor_rpm: get_f64(COL_ROTOR_RPM),
+//         generator_rpm: get_f64(COL_GENERATOR_RPM),
+//         pitch_angle_deg: get_f64(COL_PITCH_ANGLE),
+//     })
+// }
+
+/// Read all data rows from a Kelmarsh Turbine_Data CSV file.
+///
+/// Row-level failures (malformed timestamp, unparseable field, missing column)
+/// are counted in `ParseStats` and the row is skipped. File-level failures
+/// (file not found, missing header) return `Err`.
+pub fn read_all_rows(csv_path: &Path) -> anyhow::Result<(Vec<CanonicalRow>, ParseStats)> {
     let turbine_id = turbine_id_from_path(csv_path)
         .ok_or_else(|| anyhow::anyhow!("could not extract turbine ID from filename"))?;
 
@@ -103,26 +167,49 @@ pub fn read_first_row(csv_path: &Path) -> anyhow::Result<CanonicalRow> {
         .has_headers(true)
         .from_reader(reader);
 
-    // Read the first data record.
-    let record = csv_reader
-        .records()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("no data rows found"))??;
+    let mut rows = Vec::new();
+    let mut stats = ParseStats::default();
 
-    // Parse timestamp (format: "2020-01-01 00:00:00", declared UTC by file header).
-    let ts_str = record.get(COL_TIMESTAMP)
-        .ok_or_else(|| anyhow::anyhow!("timestamp column missing"))?;
-    let naive = NaiveDateTime::parse_from_str(ts_str, "%Y-%m-%d %H:%M:%S")?;
+    for result in csv_reader.records() {
+        let record = match result {
+            Ok(r) => r,
+            Err(_) => {
+                stats.rows_failed += 1;
+                continue;
+            }
+        };
+
+        match parse_row(&record, &turbine_id) {
+            Some(row) => {
+                rows.push(row);
+                stats.rows_ok += 1;
+            }
+            None => {
+                stats.rows_failed += 1;
+            }
+        }
+    }
+
+    Ok((rows, stats))
+}
+
+/// Extract a CanonicalRow from a single CSV record.
+///
+/// Returns None on any parse failure (bad timestamp, missing column, etc).
+/// This is the single point where row-level failures are converted to `None`
+/// for the skip-and-count strategy in `read_all_rows`.
+fn parse_row(record: &csv::StringRecord, turbine_id: &str) -> Option<CanonicalRow> {
+    let ts_str = record.get(COL_TIMESTAMP)?;
+    let naive = NaiveDateTime::parse_from_str(ts_str, "%Y-%m-%d %H:%M:%S").ok()?;
     let timestamp_utc = DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc);
 
-    // Helper closure to pull a field by index and parse as Option<f64>.
     let get_f64 = |idx: usize| -> Option<f64> {
         record.get(idx).and_then(parse_optional_f64_str)
     };
 
-    Ok(CanonicalRow {
+    Some(CanonicalRow {
         timestamp_utc,
-        turbine_id,
+        turbine_id: turbine_id.to_string(),
         wind_speed_ms: get_f64(COL_WIND_SPEED),
         wind_direction_deg: get_f64(COL_WIND_DIRECTION),
         nacelle_position_deg: get_f64(COL_NACELLE_POSITION),
