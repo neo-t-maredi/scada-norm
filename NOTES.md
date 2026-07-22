@@ -37,3 +37,26 @@
 - Current README is Day 1 status boilerplate
 - Revisit on Day 6 with real shipped features to describe
 - Add: canonical schema description, ops-engineer framing, example command
+
+## Wednesday 2026-07-22 — Piece 7 shipped
+
+### Delivered
+- `src/writer.rs`: Arrow schema + row-to-column pivot + Parquet writer with Snappy compression
+- End-to-end pipeline verified: Kelmarsh CSV (470MB, 299 cols) → CanonicalRow (11 cols) → Parquet (3.9MB)
+- Independent verification via pyarrow: schema honored, timestamps UTC-tagged, full year present
+
+### Performance
+- Read 52,704 rows: ~2.3s (release build, cold cache)
+- Write Parquet: 46ms
+- On-disk compression: 20x (from ~78MB/turbine CSV to 3.9MB Parquet)
+
+### Next session (Thursday)
+1. Loop over all 6 turbines (Piece 6, deferred)
+2. README rewrite — real content, not scaffold boilerplate
+3. LinkedIn post draft
+4. Ship to GitHub
+
+### Do not touch
+- File organization refactors (parser.rs split → after v1 ships)
+- Data quality report (v1.1)
+- Second dataset (v1.2)
