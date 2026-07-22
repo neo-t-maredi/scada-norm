@@ -34,6 +34,12 @@ serde = { version = "=1.0.228", features = ["derive"] }
 # Date/time handling — real SCADA timestamps have timezones and DST issues
 chrono = { version = "=0.4.45", features = ["serde"] }
 
+# Apache Arrow — columnar in-memory format, the pivot layer between rows and Parquet
+arrow = "=59.1.0"
+
+# Parquet writer — serializes Arrow RecordBatches to disk with compression
+parquet = "=59.1.0"
+
 [profile.release]
 lto = true
 codegen-units = 1
