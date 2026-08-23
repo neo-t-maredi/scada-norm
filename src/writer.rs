@@ -101,3 +101,4 @@ pub fn write_canonical_rows_to_parquet(
 
     Ok(())
 }
+
