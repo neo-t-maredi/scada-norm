@@ -4,9 +4,7 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 
-use arrow::array::{
-    ArrayRef, Float64Array, StringArray, TimestampNanosecondArray,
-};
+use arrow::array::{ArrayRef, Float64Array, StringArray, TimestampNanosecondArray};
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
@@ -101,4 +99,3 @@ pub fn write_canonical_rows_to_parquet(
 
     Ok(())
 }
-
