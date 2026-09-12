@@ -1,6 +1,6 @@
 [package]
 name = "scada-norm"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2024"
 authors = ["Neo Maredi"]
 description = "A CLI for normalizing wind farm SCADA exports across aggregation systems"
