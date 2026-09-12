@@ -58,7 +58,7 @@ fn parse_optional_f64(s: &str) -> Option<f64> {
 /// form `KWF{N}` per SCHEMA.md.
 ///
 /// Returns `None` if the filename doesn't match the expected pattern.
-fn turbine_id_from_path(path: &Path) -> Option<String> {
+pub fn turbine_id_from_path(path: &Path) -> Option<String> {
     let filename = path.file_name()?.to_str()?;
 
     // Split by underscore and find the turbine number.
@@ -81,20 +81,6 @@ fn turbine_id_from_path(path: &Path) -> Option<String> {
 
     Some(format!("KWF{}", turbine_number))
 }
-
-/// Read the first data row from a Kelmarsh Turbine_Data CSV and return
-/// it as a CanonicalRow.
-///
-/// This is Piece 4 of the parser walkthrough — proves that we can:
-///   - Open the file
-///   - Skip 9 comment lines
-///   - Parse the header
-///   - Read one data row
-///   - Extract 10 canonical fields by column index
-///   - Handle NaN sentinels via parse_optional_f64
-///   - Attach turbine_id from the filename
-///   - Parse the timestamp as UTC
-
 
 /// Read all data rows from a Kelmarsh Turbine_Data CSV file.
 ///
@@ -155,9 +141,7 @@ fn parse_row(record: &csv::StringRecord, turbine_id: &str) -> Option<CanonicalRo
     let naive = NaiveDateTime::parse_from_str(ts_str, "%Y-%m-%d %H:%M:%S").ok()?;
     let timestamp_utc = DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc);
 
-    let get_f64 = |idx: usize| -> Option<f64> {
-        record.get(idx).and_then(parse_optional_f64_str)
-    };
+    let get_f64 = |idx: usize| -> Option<f64> { record.get(idx).and_then(parse_optional_f64_str) };
 
     Some(CanonicalRow {
         timestamp_utc,

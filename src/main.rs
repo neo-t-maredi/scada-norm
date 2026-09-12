@@ -1,10 +1,9 @@
 use std::path::PathBuf;
-use std::time::Instant;
 
+use anyhow::bail;
 use clap::Parser;
 
-use scada_norm::parser;
-use scada_norm::writer;
+use scada_norm::batch;
 
 #[derive(Parser)]
 #[command(
@@ -13,10 +12,10 @@ use scada_norm::writer;
     about = "Normalize turbine SCADA exports to a canonical Parquet schema"
 )]
 struct Cli {
-    /// Input SCADA CSV export
+    /// Input SCADA CSV export, or a directory containing them
     input: PathBuf,
 
-    /// Output Parquet path
+    /// Output Parquet path, or output directory when INPUT is a directory
     #[arg(short, long)]
     output: PathBuf,
 }
@@ -24,24 +23,17 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Read.
-    let start = Instant::now();
-    let (rows, stats) = parser::read_all_rows(&cli.input)?;
-    let read_elapsed = start.elapsed();
-
-    println!("Read {} rows in {:.2?}", stats.rows_ok, read_elapsed);
-    println!("  rows_failed: {}", stats.rows_failed);
-
-    // Write.
-    if let Some(parent) = cli.output.parent() {
-        std::fs::create_dir_all(parent)?;
+    if cli.input.is_dir() {
+        let report = batch::normalize_dir(&cli.input, &cli.output)?;
+        println!(
+            "Batch complete: {} files, {} rows, {} failed",
+            report.files, report.rows_ok, report.failed
+        );
+        if report.failed > 0 {
+            bail!("{} file(s) failed", report.failed);
+        }
+        Ok(())
+    } else {
+        batch::normalize_one(&cli.input, &cli.output).map(|_| ())
     }
-
-    let start = Instant::now();
-    writer::write_canonical_rows_to_parquet(&rows, &cli.output)?;
-    let write_elapsed = start.elapsed();
-
-    println!("Wrote {} in {:.2?}", cli.output.display(), write_elapsed);
-
-    Ok(())
 }
